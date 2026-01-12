@@ -3,138 +3,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>隊員通訊錄查詢</title>
+    <title>隊員通訊錄(全隊查詢版)</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root { --primary-color: #2c3e50; }
-        body { background-color: #f8f9fa; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-        .navbar { background-color: var(--primary-color); color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .sticky-search { position: sticky; top: 0; z-index: 1020; background: #f8f9fa; padding: 15px 0; border-bottom: 1px solid #dee2e6; }
-        .nav-pills .nav-link { color: #555; background: #fff; margin: 2px; border: 1px solid #ddd; }
-        .nav-pills .nav-link.active { background-color: var(--primary-color); border-color: var(--primary-color); }
-        .contact-card { border: none; border-radius: 12px; transition: transform 0.2s; }
-        .contact-card:active { transform: scale(0.98); }
-        .phone-link { text-decoration: none; color: #007bff; font-weight: 500; font-size: 1.1rem; }
-        .home-phone { color: #6c757d; font-size: 0.95rem; }
-        .empty-state { text-align: center; padding: 40px; color: #999; }
+        body { background-color: #f4f7f6; font-family: sans-serif; }
+        .navbar { background-color: var(--primary-color); color: white; }
+        .sticky-search { position: sticky; top: 0; z-index: 1020; background: #f4f7f6; padding: 15px 0; }
+        .nav-pills .nav-link { background: #fff; margin: 2px; border: 1px solid #ddd; color: #555; }
+        .nav-pills .nav-link.active { background-color: #0d6efd; color: white; }
+        .contact-card { border-radius: 10px; border: none; }
+        .badge-team { font-size: 0.7rem; padding: 4px 8px; }
+        .phone-link { text-decoration: none; font-size: 1.1rem; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<nav class="navbar">
+<nav class="navbar shadow-sm">
     <div class="container-fluid justify-content-center">
-        <span class="navbar-brand mb-0 h1 text-white">2026 隊員名單查詢</span>
+        <span class="navbar-brand mb-0 h1 text-white">2026 隊員名單全系統</span>
     </div>
 </nav>
 
 <div class="container">
     <div class="sticky-search">
-        <input type="text" id="searchInput" class="form-control form-control-lg shadow-sm" placeholder="🔍 輸入姓名或電話搜尋...">
+        <input type="text" id="searchInput" class="form-control form-control-lg shadow-sm" placeholder="🔍 輸入姓名、電話可跨隊搜尋...">
     </div>
 
-    <ul class="nav nav-pills nav-fill my-3" id="sheetTabs">
-        <li class="nav-item"><a class="nav-link active" data-file="data1.json" href="#">協力一</a></li>
-        <li class="nav-item"><a class="nav-link" data-file="data2.json" href="#">協力二</a></li>
-        <li class="nav-item"><a class="nav-link" data-file="data3.json" href="#">協力三</a></li>
-        <li class="nav-item"><a class="nav-link" data-file="data4.json" href="#">協力四</a></li>
+    <ul class="nav nav-pills nav-fill mb-3" id="sheetTabs">
+        <li class="nav-item"><a class="nav-link active" data-team="all" href="#">全部</a></li>
+        <li class="nav-item"><a class="nav-link" data-team="協力一" href="#">協力一</a></li>
+        <li class="nav-item"><a class="nav-link" data-team="協力二" href="#">協力二</a></li>
+        <li class="nav-item"><a class="nav-link" data-team="協力三" href="#">協力三</a></li>
+        <li class="nav-item"><a class="nav-link" data-team="協力四" href="#">協力四</a></li>
     </ul>
 
-    <div id="contactList" class="row g-3">
-        </div>
+    <div id="status" class="text-center text-muted small mb-2">資料載入中...</div>
+    <div id="contactList" class="row g-2"></div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
 <script>
-    let currentData = [];
-    let currentFile = 'data1.json';
+    let allContacts = []; // 儲存所有隊伍資料
+    let currentFiltered = []; // 儲存目前顯示的資料
 
-    // 初始化：載入第一份資料
+    // 1. 初始化：同時抓取 4 個檔案
     $(document).ready(function() {
-        loadData(currentFile);
+        const files = [
+            { name: '協力一', url: 'data1.json' },
+            { name: '協力二', url: 'data2.json' },
+            { name: '協力三', url: 'data3.json' },
+            { name: '協力四', url: 'data4.json' }
+        ];
+
+        // 使用 Promise.all 同時讀取
+        Promise.all(files.map(f => 
+            fetch(`./data/${f.url}`).then(res => res.json()).then(data => {
+                // 為每一筆資料貼上「隊伍標籤」
+                return data.map(item => ({ ...item, teamName: f.name }));
+            })
+        ))
+        .then(results => {
+            allContacts = results.flat(); // 合併陣列
+            $('#status').text(`共載入 ${allContacts.length} 筆資料`);
+            renderData(allContacts);
+        })
+        .catch(err => {
+            $('#status').html('<span class="text-danger">載入失敗，請確認 data 資料夾檔案是否存在</span>');
+        });
     });
 
-    // 切換頁籤邏輯
-    $('#sheetTabs a').on('click', function(e) {
-        e.preventDefault();
-        $('#sheetTabs a').removeClass('active');
-        $(this).addClass('active');
-        
-        currentFile = $(this).data('file');
-        $('#searchInput').val(''); // 切換時清空搜尋
-        loadData(currentFile);
-    });
+    // 2. 搜尋與篩選邏輯
+    function filterAndRender() {
+        const term = $('#searchInput').val().trim().toLowerCase();
+        const activeTeam = $('#sheetTabs .active').data('team');
 
-    // 核心讀取函式
-    function loadData(fileName) {
-        // 加入隨機參數防止 GitHub Pages 快取舊資料
-        const url = `./data/${fileName}?v=${new Date().getTime()}`;
-        
-        $('#contactList').html('<div class="text-center w-100 mt-5"><div class="spinner-border text-secondary"></div><p>載入中...</p></div>');
+        let result = allContacts;
 
-        fetch(url)
-            .then(res => {
-                if (!res.ok) throw new Error('找不到資料檔案');
-                return res.json();
-            })
-            .then(data => {
-                currentData = data;
-                renderData(data);
-            })
-            .catch(err => {
-                $('#contactList').html(`<div class="empty-state">❌ 無法讀取 ${fileName}<br>請確認 data 資料夾內是否有該檔案。</div>`);
-            });
+        // 先篩選隊伍
+        if (activeTeam !== 'all') {
+            result = result.filter(item => item.teamName === activeTeam);
+        }
+
+        // 再篩選關鍵字
+        if (term) {
+            result = result.filter(item => 
+                item.name.toLowerCase().includes(term) || 
+                item.mobile_phone.includes(term) ||
+                item.home_phone.includes(term)
+            );
+        }
+
+        renderData(result);
     }
 
-    // 渲染卡片畫面
+    // 3. 渲染畫面
     function renderData(data) {
         const container = $('#contactList');
         container.empty();
 
         if (data.length === 0) {
-            container.html('<div class="empty-state">查無相關隊員資料</div>');
+            container.html('<div class="col-12 text-center py-5 text-muted">找不到相符的資料</div>');
             return;
         }
 
         data.forEach(item => {
-            const card = `
-                <div class="col-12 col-md-6 col-lg-4">
-                    <div class="card contact-card shadow-sm h-100">
+            container.append(`
+                <div class="col-12 col-md-6">
+                    <div class="card contact-card shadow-sm">
                         <div class="card-body">
-                            <h5 class="card-title d-flex justify-content-between align-items-center">
-                                <strong>${item.name}</strong>
-                                <span class="badge bg-light text-dark fw-normal border" style="font-size: 0.75rem;">隊員</span>
-                            </h5>
-                            <hr class="my-2 opacity-50">
-                            <div class="card-text">
-                                <div class="mb-2">
-                                    <small class="text-muted d-block">手機</small>
-                                    <a href="tel:${item.mobile_phone}" class="phone-link">📱 ${item.mobile_phone || '無'}</a>
+                            <div class="d-flex justify-content-between align-items-start">
+                                <h5 class="card-title mb-1">${item.name}</h5>
+                                <span class="badge bg-secondary badge-team">${item.teamName}</span>
+                            </div>
+                            <div class="mt-2">
+                                <div class="mb-1">
+                                    <small class="text-muted">手機：</small>
+                                    <a href="tel:${item.mobile_phone}" class="phone-link">${item.mobile_phone || '無'}</a>
                                 </div>
                                 <div>
-                                    <small class="text-muted d-block">住宅電話</small>
-                                    <span class="home-phone">🏠 ${item.home_phone || '---'}</span>
+                                    <small class="text-muted">住宅：</small>
+                                    <span class="text-dark">${item.home_phone || '---'}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            `;
-            container.append(card);
+            `);
         });
     }
 
-    // 搜尋過濾功能
-    $('#searchInput').on('input', function() {
-        const term = $(this).val().trim().toLowerCase();
-        const filtered = currentData.filter(item => 
-            item.name.toLowerCase().includes(term) || 
-            item.mobile_phone.includes(term) ||
-            item.home_phone.includes(term)
-        );
-        renderData(filtered);
+    // 事件監聽
+    $('#searchInput').on('input', filterAndRender);
+    $('#sheetTabs .nav-link').on('click', function(e) {
+        e.preventDefault();
+        $('#sheetTabs .nav-link').removeClass('active');
+        $(this).addClass('active');
+        filterAndRender();
     });
 </script>
-
 </body>
 </html>
